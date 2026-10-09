@@ -34,6 +34,37 @@ jobs:
         run: flutter create --platforms=windows --project-name kvaltik_notepad .
       - run: flutter pub get
       - run: flutter build windows --release
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Create Windows installer
+        shell: pwsh
+        run: |
+          @'
+          [Setup]
+          AppName=Kvaltik Notepad
+          AppVersion=1.0.0
+          DefaultDirName={autopf}\\Kvaltik Notepad
+          DefaultGroupName=Kvaltik Notepad
+          OutputDir=.
+          OutputBaseFilename=KvaltikNotepad-Setup
+          Compression=lzma
+          SolidCompression=yes
+          [Files]
+          Source: "build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{group}\\Kvaltik Notepad"; Filename: "{app}\\kvaltik_notepad.exe"
+          Name: "{autodesktop}\\Kvaltik Notepad"; Filename: "{app}\\kvaltik_notepad.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: desktopicon; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\\kvaltik_notepad.exe"; Description: "Launch Kvaltik Notepad"; Flags: nowait postinstall skipifsilent
+          '@ | Set-Content -Path installer.iss -Encoding UTF8
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KvaltikNotepad-Windows-Setup-EXE
+          path: KvaltikNotepad-Setup.exe
       - name: Package Windows app
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath KvaltikNotepad-Windows.zip
