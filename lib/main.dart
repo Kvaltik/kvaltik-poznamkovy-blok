@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
@@ -112,23 +113,62 @@ class _NotesPageState extends State<NotesPage> {
   Future<void> edit([int? index]) async {
     final title = TextEditingController(text: index == null ? '' : notes[index]['title'] as String);
     final body = TextEditingController(text: index == null ? '' : notes[index]['body'] as String);
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => Scaffold(
+    int? editingIndex = index;
+    Timer? autoSaveTimer;
+    bool dirty = false;
+
+    Future<void> persist() async {
+      if (!dirty) return;
+      dirty = false;
+      final item = <String, dynamic>{
+        'title': title.text.trim().isEmpty ? 'Bez názvu' : title.text.trim(),
+        'body': body.text,
+        'updated': DateTime.now().toIso8601String(),
+      };
+      if (editingIndex == null) {
+        notes.insert(0, item);
+        editingIndex = 0;
+      } else {
+        notes[editingIndex!] = item;
+      }
+      await save();
+    }
+
+    void scheduleSave() {
+      dirty = true;
+      autoSaveTimer?.cancel();
+      autoSaveTimer = Timer(const Duration(milliseconds: 650), () {
+        persist();
+      });
+    }
+
+    title.addListener(scheduleSave);
+    body.addListener(scheduleSave);
+    await Navigator.push<void>(context, MaterialPageRoute(builder: (editorContext) => Scaffold(
       appBar: AppBar(title: Text(index == null ? 'Nová poznámka' : 'Upravit poznámku'), actions: [
         IconButton(tooltip: 'Uložit', icon: const Icon(Icons.check), onPressed: () async {
-          final item = {'title': title.text.trim().isEmpty ? 'Bez názvu' : title.text.trim(), 'body': body.text, 'updated': DateTime.now().toIso8601String()};
-          if (index == null) { notes.insert(0, item); } else { notes[index] = item; }
-          await save();
-          if (context.mounted) Navigator.pop(context);
+          autoSaveTimer?.cancel();
+          // Tapping Save on an untouched new note creates an empty note, too.
+          if (editingIndex == null && !dirty) dirty = true;
+          await persist();
+          if (editorContext.mounted) Navigator.pop(editorContext);
         })
       ]),
       body: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-        TextField(controller: title, style: Theme.of(context).textTheme.headlineSmall, decoration: const InputDecoration(hintText: 'Název poznámky', border: InputBorder.none)),
+        TextField(controller: title, style: Theme.of(editorContext).textTheme.headlineSmall,
+          decoration: const InputDecoration(hintText: 'Název poznámky', border: InputBorder.none)),
         const Divider(),
         Expanded(child: TextField(controller: body, expands: true, maxLines: null, minLines: null,
           decoration: const InputDecoration(hintText: 'Piš svoji poznámku…', border: InputBorder.none)))
       ])),
     )));
-    title.dispose(); body.dispose();
+    autoSaveTimer?.cancel();
+    // Flush the final edit when navigating away, including the Android back button.
+    await persist();
+    title.removeListener(scheduleSave);
+    body.removeListener(scheduleSave);
+    title.dispose();
+    body.dispose();
     if (mounted) setState(() {});
   }
   Future<void> remove(int index) async {
