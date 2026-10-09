@@ -44,21 +44,21 @@ jobs:
           [Setup]
           AppName=Kvaltik Notepad
           AppVersion=1.0.0
-          DefaultDirName={autopf}\\Kvaltik Notepad
+          DefaultDirName={autopf}\Kvaltik Notepad
           DefaultGroupName=Kvaltik Notepad
           OutputDir=.
           OutputBaseFilename=KvaltikNotepad-Setup
           Compression=lzma
           SolidCompression=yes
           [Files]
-          Source: "build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
           [Icons]
-          Name: "{group}\\Kvaltik Notepad"; Filename: "{app}\\kvaltik_notepad.exe"
-          Name: "{autodesktop}\\Kvaltik Notepad"; Filename: "{app}\\kvaltik_notepad.exe"; Tasks: desktopicon
+          Name: "{group}\Kvaltik Notepad"; Filename: "{app}\kvaltik_notepad.exe"
+          Name: "{autodesktop}\Kvaltik Notepad"; Filename: "{app}\kvaltik_notepad.exe"; Tasks: desktopicon
           [Tasks]
           Name: desktopicon; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
           [Run]
-          Filename: "{app}\\kvaltik_notepad.exe"; Description: "Launch Kvaltik Notepad"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\kvaltik_notepad.exe"; Description: "Launch Kvaltik Notepad"; Flags: nowait postinstall skipifsilent
           '@ | Set-Content -Path installer.iss -Encoding UTF8
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
       - uses: actions/upload-artifact@v4
