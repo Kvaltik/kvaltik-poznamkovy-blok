@@ -34,7 +34,7 @@ class _SplashPageState extends State<SplashPage> {
     if (!mounted) return;
     final user = p.getString('session');
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => user == null ? LoginPage(onTheme: widget.onTheme) : NotesPage(user: user, onTheme: widget.onTheme)));
-    if (user != null) { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) UpdateChecker.check(context); }); }
+
   }
   @override Widget build(BuildContext context) => const Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
     Icon(Icons.edit_note, size: 100, color: Colors.tealAccent), SizedBox(height: 14),
@@ -102,7 +102,7 @@ class NotesPage extends StatefulWidget {
 class _NotesPageState extends State<NotesPage> {
   List<Map<String, dynamic>> notes = [];
   String search = '';
-  @override void initState() { super.initState(); load(); }
+  @override void initState() { super.initState(); load(); WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) UpdateChecker.check(context); }); }
   String get key => 'notes:${widget.user}';
   Future<void> load() async {
     final p = await SharedPreferences.getInstance();
