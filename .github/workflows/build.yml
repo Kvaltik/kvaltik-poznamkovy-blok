@@ -14,7 +14,7 @@ on:
       release_version:
         description: 'Version to build, for example 1.1.0'
         required: true
-        default: '1.1.0'
+        default: '1.2.0'
         type: string
       publish_release:
         description: 'Publish APK and EXE to the PUBLIC updates repository'
@@ -31,8 +31,10 @@ permissions:
   contents: read
 
 env:
-  APP_VERSION: ${{ inputs.release_version || '1.1.0' }}
+  APP_VERSION: ${{ inputs.release_version || '1.2.0' }}
   PUBLIC_UPDATES_REPO: Kvaltik/kvaltik-notepad-updates
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
 jobs:
   android:
@@ -56,8 +58,18 @@ jobs:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
         run: python3 scripts/prepare_android.py
       - run: flutter pub get
-      - name: Build Android APK
-        run: flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_BUILD_NUMBER"
+      - name: Build Android APK with public cloud configuration
+        shell: bash
+        env:
+          PUBLISH_RELEASE: ${{ inputs.publish_release || false }}
+        run: |
+          if [[ "$PUBLISH_RELEASE" == "true" && ( -z "$SUPABASE_URL" || -z "$SUPABASE_ANON_KEY" ) ]]; then
+            echo "::error::Cloud publishing requires SUPABASE_URL and SUPABASE_ANON_KEY Actions secrets."
+            exit 1
+          fi
+          flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_BUILD_NUMBER" \\
+            --dart-define="SUPABASE_URL=$SUPABASE_URL" \\
+            --dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
       - uses: actions/upload-artifact@v4
         with:
           name: KvaltikNotepad-Android-APK
@@ -77,8 +89,17 @@ jobs:
       - name: Generate Windows project
         run: flutter create --platforms=windows --project-name kvaltik_notepad .
       - run: flutter pub get
-      - name: Build Windows application
-        run: flutter build windows --release --build-name="$env:APP_VERSION" --build-number="$env:APP_BUILD_NUMBER"
+      - name: Build Windows application with public cloud configuration
+        shell: pwsh
+        env:
+          PUBLISH_RELEASE: ${{ inputs.publish_release || false }}
+        run: |
+          if ($env:PUBLISH_RELEASE -eq 'true' -and ([string]::IsNullOrWhiteSpace($env:SUPABASE_URL) -or [string]::IsNullOrWhiteSpace($env:SUPABASE_ANON_KEY))) {
+            throw 'Cloud publishing requires SUPABASE_URL and SUPABASE_ANON_KEY Actions secrets.'
+          }
+          flutter build windows --release --build-name="$env:APP_VERSION" --build-number="$env:APP_BUILD_NUMBER" `
+            --dart-define="SUPABASE_URL=$env:SUPABASE_URL" `
+            --dart-define="SUPABASE_ANON_KEY=$env:SUPABASE_ANON_KEY"
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
