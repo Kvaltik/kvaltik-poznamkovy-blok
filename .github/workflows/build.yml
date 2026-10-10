@@ -1,12 +1,39 @@
 name: Build Android APK and Windows
+
 on:
-  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'lib/**'
       - 'pubspec.yaml'
+      - 'scripts/**'
+      - 'installer.iss'
       - '.github/workflows/build.yml'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Version to build, for example 1.1.0'
+        required: true
+        default: '1.1.0'
+        type: string
+      publish_release:
+        description: 'Publish APK and EXE to the PUBLIC updates repository'
+        required: true
+        default: false
+        type: boolean
+      release_notes:
+        description: 'What changed (shown inside the app)'
+        required: false
+        default: 'New functions and bug fixes.'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  APP_VERSION: ${{ inputs.release_version || '1.1.0' }}
+  PUBLIC_UPDATES_REPO: Kvaltik/kvaltik-notepad-updates
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -15,14 +42,28 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Generate platform files
+      - name: Validate release version and calculate Android versionCode
+        shell: bash
+        run: echo "APP_BUILD_NUMBER=$(python3 scripts/build_number.py "$APP_VERSION")" >> "$GITHUB_ENV"
+      - name: Generate Android project
         run: flutter create --platforms=android --project-name kvaltik_notepad .
+      - name: Configure Android networking and signing
+        env:
+          PUBLISH_RELEASE: ${{ inputs.publish_release || false }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: python3 scripts/prepare_android.py
       - run: flutter pub get
-      - run: flutter build apk --release
+      - name: Build Android APK
+        run: flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_BUILD_NUMBER"
       - uses: actions/upload-artifact@v4
         with:
           name: KvaltikNotepad-Android-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
   windows:
     runs-on: windows-latest
     steps:
@@ -30,45 +71,74 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Generate platform files
+      - name: Calculate application build number
+        shell: bash
+        run: echo "APP_BUILD_NUMBER=$(python scripts/build_number.py "$APP_VERSION")" >> "$GITHUB_ENV"
+      - name: Generate Windows project
         run: flutter create --platforms=windows --project-name kvaltik_notepad .
       - run: flutter pub get
-      - run: flutter build windows --release
+      - name: Build Windows application
+        run: flutter build windows --release --build-name="$env:APP_VERSION" --build-number="$env:APP_BUILD_NUMBER"
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
-      - name: Create Windows installer
+      - name: Build Windows EXE installer
         shell: pwsh
         run: |
-          @'
-          [Setup]
-          AppName=Kvaltik Notepad
-          AppVersion=1.0.0
-          DefaultDirName={autopf}\Kvaltik Notepad
-          DefaultGroupName=Kvaltik Notepad
-          OutputDir=.
-          OutputBaseFilename=KvaltikNotepad-Setup
-          Compression=lzma
-          SolidCompression=yes
-          [Files]
-          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
-          [Icons]
-          Name: "{group}\Kvaltik Notepad"; Filename: "{app}\kvaltik_notepad.exe"
-          Name: "{autodesktop}\Kvaltik Notepad"; Filename: "{app}\kvaltik_notepad.exe"; Tasks: desktopicon
-          [Tasks]
-          Name: desktopicon; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
-          [Run]
-          Filename: "{app}\kvaltik_notepad.exe"; Description: "Launch Kvaltik Notepad"; Flags: nowait postinstall skipifsilent
-          '@ | Set-Content -Path installer.iss -Encoding UTF8
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          $app = Get-ChildItem -Path build/windows -Filter kvaltik_notepad.exe -Recurse | Select-Object -First 1
+          if (-not $app) { throw "Windows application executable not found" }
+          $folder = $app.Directory.FullName
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found" }
+          & $compiler "/DAppSource=$folder" "/DAppVersion=$env:APP_VERSION" installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
       - uses: actions/upload-artifact@v4
         with:
           name: KvaltikNotepad-Windows-Setup-EXE
-          path: KvaltikNotepad-Setup.exe
-      - name: Package Windows app
-        shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath KvaltikNotepad-Windows.zip
-      - uses: actions/upload-artifact@v4
+          path: dist/KvaltikNotepad-Setup.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PUBLIC GitHub Releases
+    needs: [android, windows]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          name: KvaltikNotepad-Windows
-          path: KvaltikNotepad-Windows.zip
+          name: KvaltikNotepad-Android-APK
+          path: dist/android
+      - uses: actions/download-artifact@v4
+        with:
+          name: KvaltikNotepad-Windows-Setup-EXE
+          path: dist/windows
+      - name: Publish only installers to the public repository
+        env:
+          GH_TOKEN: ${{ secrets.UPDATES_RELEASE_TOKEN }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::Missing UPDATES_RELEASE_TOKEN secret. See README.md."
+            exit 1
+          fi
+          visibility="$(gh repo view "$PUBLIC_UPDATES_REPO" --json visibility --jq '.visibility')"
+          if [[ "$visibility" != "PUBLIC" ]]; then
+            echo "::error::Update distribution repository must be PUBLIC."
+            exit 1
+          fi
+          if gh release view "v$APP_VERSION" --repo "$PUBLIC_UPDATES_REPO" > /dev/null 2>&1; then
+            echo "::error::Release v$APP_VERSION already exists; select a higher version."
+            exit 1
+          fi
+          cp dist/android/app-release.apk dist/KvaltikNotepad-Android.apk
+          cp dist/windows/KvaltikNotepad-Setup.exe dist/KvaltikNotepad-Setup.exe
+          printf '%s\n' "$RELEASE_NOTES" > notes.txt
+          gh release create "v$APP_VERSION" \
+            dist/KvaltikNotepad-Android.apk \
+            dist/KvaltikNotepad-Setup.exe \
+            --repo "$PUBLIC_UPDATES_REPO" \
+            --target main \
+            --title "Kvaltik Notepad v$APP_VERSION" \
+            --notes-file notes.txt
