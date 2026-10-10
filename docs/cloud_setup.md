@@ -15,26 +15,19 @@ V **Authentication → Sign In / Providers → Email** ponech povolené přihlá
 Doporučujeme zapnuté potvrzování e-mailu (**Confirm email**). Pokud je aktivní, nový uživatel dostane e-mail a musí účet potvrdit; potom v aplikaci klikne na **Přihlásit se**.
 Není potřeba přihlašování přes Google, service_role klíč ani vlastní backend server.
 
-## 3. Propoj sestavení přes GitHub Actions Secrets
+## 3. Cloud připojení v sestavení
 
-V Supabase najdeš v **Project Settings → API Keys** tyto veřejné klientské údaje:
+**Projekt už je propojený.** GitHub Actions v soukromém repozitáři má nastavené
+URL projektu a jeho **veřejný Supabase publishable key**. Klíč je určený
+pro distribuci do klientských aplikací; samotná oprávnění v databázi
+vynucuje přihlášení uživatele a Row Level Security (RLS).
 
-- **Project URL** (např. `https://your-project.supabase.co`), v některých verzích panelu je na **Connect**.
-- **Publishable key** (obvykle `sb_publishable_...`), případně starší **anon public** klíč.
+**Nemusíš zadávat další GitHub Secrets pro Supabase.** Pokud v budoucnu
+dojde k výměně klientského klíče, lze přepsat veřejnou konfiguraci
+volitelnými Actions Secrets `SUPABASE_URL` a `SUPABASE_ANON_KEY`.
 
-V soukromém GitHub repozitáři Kvaltik/kvaltik-poznamkovy-blok otevři:
-https://github.com/Kvaltik/kvaltik-poznamkovy-blok/settings/secrets/actions
-
-Přidej přesně dvě hodnoty:
-
-| Name | Value |
-| --- | --- |
-| `SUPABASE_URL` | URL Supabase projektu |
-| `SUPABASE_ANON_KEY` | **Publishable** nebo **anon public** klíč |
-
-**DŮLEŽITÉ:** NIKDY nepoužívej `service_role`, `sb_secret_...`, databázové heslo nebo osobní token v klientské aplikaci. Ani do GitHub chatu neposílej žádný tajný údaj.
-
-GitHub workflow předá obě veřejné hodnoty při sestavení Androidu a Windows pomocí `--dart-define`. Pokud chybějí, CI může sestavit offline verzi pro testování, ale **veřejné vydání se zastaví**.
+**Nikdy sem nevkládej** `service_role`, `sb_secret_...`, heslo
+k databázi nebo osobní přístupový token.
 
 ## 4. Test obou platforem
 
