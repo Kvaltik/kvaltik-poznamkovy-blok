@@ -536,7 +536,7 @@ class _NotesPageState extends State<NotesPage>
     final body = TextEditingController(
         text: original == null ? '' : (original['body'] ?? '').toString());
     var editingIndex = index;
-    String? noteId = cloud ? original?['id'] as String? : null;
+    String? noteId = cloud ? (original?['id'] as String?) : null;
     Timer? autoSaveTimer;
     var dirty = false;
 
