@@ -1,7 +1,7 @@
 name: kvaltik_notepad
 description: Kvaltik Notepad - poznamky pro Android
 publish_to: none
-version: 1.1.0+1001000
+version: 1.2.0+1002000
 environment:
   sdk: '>=3.3.0 <4.0.0'
 dependencies:
@@ -11,5 +11,6 @@ dependencies:
   crypto: ^3.0.5
   package_info_plus: ^8.1.2
   url_launcher: ^6.3.1
+  supabase_flutter: ^2.10.0
 flutter:
   uses-material-design: true
