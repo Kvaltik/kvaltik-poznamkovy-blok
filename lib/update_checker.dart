@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// GitHub Releases updater. Requires a PUBLIC release feed.
+/// Public GitHub Releases updater. The source repository remains private.
 class UpdateChecker {
-  static const latestRelease = 'https://api.github.com/repos/Kvaltik/kvaltik-poznamkovy-blok/releases/latest';
+  static const latestRelease = 'https://api.github.com/repos/Kvaltik/kvaltik-notepad-updates/releases/latest';
 
   static List<int> parts(String version) => version.replaceFirst(RegExp(r'^v'), '').split('.').map((p) => int.tryParse(p.split(RegExp(r'[-+]')).first) ?? 0).toList();
 
@@ -32,7 +32,7 @@ class UpdateChecker {
       client.close(force: true);
       if (response.statusCode != 200) {
         if (manual && context.mounted) {
-          await _message(context, 'Aktualizace nelze ověřit', 'GitHub vrátil HTTP ${response.statusCode}. Soukromý repozitář nemá veřejný přístup k Releases. Pro aktualizace je potřeba veřejný distribuční kanál.');
+          await _message(context, 'Aktualizace nelze ověřit', 'Nepodařilo se načíst veřejná vydání (HTTP ${response.statusCode}). Ověř, že existuje veřejný repozitář Kvaltik/kvaltik-notepad-updates a obsahuje vydanou verzi.');
         }
         return;
       }
@@ -43,9 +43,11 @@ class UpdateChecker {
         return;
       }
       final assets = (release['assets'] as List? ?? []).whereType<Map>().toList();
-      final ext = Platform.isAndroid ? '.apk' : '.exe';
-      final matching = assets.where((a) => (a['name'] ?? '').toString().toLowerCase().endsWith(ext)).toList();
-      final download = matching.isEmpty ? null : Uri.tryParse((matching.first['browser_download_url'] ?? '').toString());
+      final expectedName = Platform.isAndroid ? 'KvaltikNotepad-Android.apk' : 'KvaltikNotepad-Setup.exe';
+      final matching = assets.where((a) => (a['name'] ?? '').toString() == expectedName).toList();
+      final candidate = matching.isEmpty ? null : Uri.tryParse((matching.first['browser_download_url'] ?? '').toString());
+      final download = candidate != null && candidate.scheme == 'https' && candidate.host == 'github.com' &&
+          candidate.path.startsWith('/Kvaltik/kvaltik-notepad-updates/releases/download/') ? candidate : null;
       if (!context.mounted) return;
       await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
         title: const Text('Nová aktualizace! 🚀'),
@@ -61,7 +63,10 @@ class UpdateChecker {
             Navigator.pop(dialogContext);
             // Open the trusted GitHub asset URL in the system browser.
             // Installation requires explicit user confirmation.
-            await launchUrl(download, mode: LaunchMode.externalApplication);
+            final opened = await launchUrl(download, mode: LaunchMode.externalApplication);
+            if (!opened && context.mounted) {
+              await _message(context, 'Nelze otevřít aktualizaci', 'Zkus stáhnout instalátor z GitHub Releases ručně.');
+            }
           }, child: const Text('Aktualizovat')),
         ],
       ));
