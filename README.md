@@ -3,14 +3,19 @@
 Poznámkový blok pro **Windows (EXE)** a **Android (APK)** vytvořený ve Flutteru.
 
 ## Co aplikace umí
-- Načítací obrazovka, registrace a přihlášení (prozatím lokální účty).
+- Načítací obrazovka, cloudová registrace/přihlášení (e-mail a heslo) i přístup ke starým místním účtům.
 - Poznámky, automatické ukládání, vyhledávání, světlý/tmavý režim.
 - Kontrola nových verzí při otevření poznámek i ručně ikonou Aktualizace.
 - Pokud vyšla novější verze, dialog **Aktualizovat** / **Později** a seznam změn.
 - Tlačítko Aktualizovat otevře bezpečný odkaz na instalační soubor v prohlížeči; instalaci uživatel potvrzuje.
 
-**Pozor:** Cloudová synchronizace poznámek PC ↔ Android ještě není hotová.
-Aplikace zatím ukládá data lokálně. Před přeinstalací Androidu si poznámky zálohuj.
+**Novinka 1.2.0:** Offline-first synchronizace poznámek přes Supabase na PC a mobilu včetně bezpečného převodu starých místních poznámek. Vyžaduje jednorázové [nastavení Supabase](docs/cloud_setup.md) a spuštění [SQL databázového skriptu](supabase/schema.sql). Před přeinstalací Androidu původní data nejdřív převeď nebo zazálohuj.
+
+## Synchronizace Windows ↔ Android
+
+Propojení účtu a synchronizace funguje od verze **1.2.0**, pokud je dokončeno nastavení Supabase. Při práci bez připojení ukládá aplikace změny lokálně a posílá je po připojení. Změny se stahují v otevřené aplikaci přibližně každých 20 sekund a také po návratu do aplikace.
+
+**Postup zprovoznění včetně dvou GitHub Secrets, RLS a převodu lokálních účtů:** [docs/cloud_setup.md](docs/cloud_setup.md).
 
 ## Architektura aktualizací
 
@@ -107,8 +112,8 @@ veřejný distribuční kanál. Verzi **1.1** je potřeba jednorázově nainstal
 
 - Soukromý zdrojový kód se do veřejných Releases nenahrává.
 - GitHub Actions tajné údaje používejte pouze v soukromém repozitáři.
-- Zatím není hotová cloudová synchronizace účtů ani poznámek.
-- V prototypu jsou lokální hesla a poznámky ukládané pomocí shared_preferences;
+- Cloudová synchronizace je v kódu připravená; bez konfigurace Supabase není aktivní.
+- Lokální účty v prototypu ukládají hesla pomocí shared_preferences a lokální poznámky jsou bez šifrování;
   **není to bezpečné úložiště vhodné pro citlivá data**. Před veřejným nasazením je
   potřeba posílit ověřování a šifrování.
 - Finální instalátory zatím vyžadují testování na skutečném Windows a Android zařízení.
