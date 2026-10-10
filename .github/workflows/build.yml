@@ -67,8 +67,8 @@ jobs:
             echo "::error::Cloud publishing requires SUPABASE_URL and SUPABASE_ANON_KEY Actions secrets."
             exit 1
           fi
-          flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_BUILD_NUMBER" \\
-            --dart-define="SUPABASE_URL=$SUPABASE_URL" \\
+          flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_BUILD_NUMBER" \
+            --dart-define="SUPABASE_URL=$SUPABASE_URL" \
             --dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
       - uses: actions/upload-artifact@v4
         with:
