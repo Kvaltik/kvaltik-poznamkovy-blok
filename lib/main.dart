@@ -1,3 +1,4 @@
+import 'update_checker.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -33,6 +34,7 @@ class _SplashPageState extends State<SplashPage> {
     if (!mounted) return;
     final user = p.getString('session');
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => user == null ? LoginPage(onTheme: widget.onTheme) : NotesPage(user: user, onTheme: widget.onTheme)));
+    if (user != null) { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) UpdateChecker.check(context); }); }
   }
   @override Widget build(BuildContext context) => const Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
     Icon(Icons.edit_note, size: 100, color: Colors.tealAccent), SizedBox(height: 14),
@@ -183,6 +185,7 @@ class _NotesPageState extends State<NotesPage> {
   @override Widget build(BuildContext context) {
     final shown = notes.asMap().entries.where((e) => ('${e.value['title']} ${e.value['body']}').toLowerCase().contains(search)).toList();
     return Scaffold(appBar: AppBar(title: const Text('Kvaltík Notepad'), actions: [
+      IconButton(tooltip: 'Aktualizace', onPressed: () => UpdateChecker.check(context, manual: true), icon: const Icon(Icons.system_update_alt)),
       IconButton(tooltip: 'Motiv', onPressed: widget.onTheme, icon: const Icon(Icons.dark_mode_outlined)),
       IconButton(tooltip: 'Odhlásit', onPressed: logout, icon: const Icon(Icons.logout))
     ]), body: Column(children: [
