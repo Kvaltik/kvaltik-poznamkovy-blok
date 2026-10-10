@@ -33,8 +33,9 @@ permissions:
 env:
   APP_VERSION: ${{ inputs.release_version || '1.2.0' }}
   PUBLIC_UPDATES_REPO: Kvaltik/kvaltik-notepad-updates
-  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+  # Only public client values. NEVER use service_role or sb_secret_ keys here.
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://ntykhzqsdnhthbwqlibc.supabase.co' }}
+  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'sb_publishable_2gl3uJ1FwpRRPQ30PHhp3A_U7W6rSbT' }}
 
 jobs:
   android:
