@@ -9,6 +9,24 @@ from pathlib import Path
 import re
 import sys
 
+
+def property_value(value):
+    """Escape a value for java.util.Properties without changing credentials."""
+    escaped = []
+    for char in value:
+        code = ord(char)
+        if char in "\\ :=#!":
+            escaped.append("\\" + char)
+        elif char in "\t\n\r\f":
+            escaped.append({"\t": r"\t", "\n": r"\n", "\r": r"\r", "\f": r"\f"}[char])
+        elif code < 32 or code > 126:
+            for offset in range(0, len(char.encode("utf-16-be")), 2):
+                unit = char.encode("utf-16-be")[offset:offset + 2]
+                escaped.append("\\u%04x" % int.from_bytes(unit, "big"))
+        else:
+            escaped.append(char)
+    return "".join(escaped)
+
 manifest = Path("android/app/src/main/AndroidManifest.xml")
 if not manifest.is_file():
     sys.exit("Missing generated Android manifest. Run flutter create first.")
@@ -45,9 +63,9 @@ keystore = Path("android/app/kvaltik-release.jks")
 keystore.write_bytes(base64.b64decode(values["ANDROID_KEYSTORE_BASE64"], validate=True))
 properties = Path("android/key.properties")
 properties.write_text(
-    "storePassword=" + values["ANDROID_STORE_PASSWORD"] + "\n"
-    "keyPassword=" + values["ANDROID_KEY_PASSWORD"] + "\n"
-    "keyAlias=" + values["ANDROID_KEY_ALIAS"] + "\n"
+    "storePassword=" + property_value(values["ANDROID_STORE_PASSWORD"]) + "\n"
+    "keyPassword=" + property_value(values["ANDROID_KEY_PASSWORD"]) + "\n"
+    "keyAlias=" + property_value(values["ANDROID_KEY_ALIAS"]) + "\n"
     "storeFile=kvaltik-release.jks\n",
     encoding="utf-8"
 )
