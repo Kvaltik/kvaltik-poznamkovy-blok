@@ -47,7 +47,9 @@ jobs:
           channel: stable
       - name: Validate release version and calculate Android versionCode
         shell: bash
-        run: echo "APP_BUILD_NUMBER=$(python3 scripts/build_number.py "$APP_VERSION")" >> "$GITHUB_ENV"
+        run: |
+          APP_BUILD_NUMBER=$(python3 scripts/build_number.py "$APP_VERSION")
+          echo "APP_BUILD_NUMBER=$APP_BUILD_NUMBER" >> "$GITHUB_ENV"
       - name: Generate Android project
         run: flutter create --platforms=android --project-name kvaltik_notepad .
       - name: Configure Android networking and signing
@@ -86,7 +88,9 @@ jobs:
           channel: stable
       - name: Calculate application build number
         shell: bash
-        run: echo "APP_BUILD_NUMBER=$(python scripts/build_number.py "$APP_VERSION")" >> "$GITHUB_ENV"
+        run: |
+          APP_BUILD_NUMBER=$(python scripts/build_number.py "$APP_VERSION")
+          echo "APP_BUILD_NUMBER=$APP_BUILD_NUMBER" >> "$GITHUB_ENV"
       - name: Generate Windows project
         run: flutter create --platforms=windows --project-name kvaltik_notepad .
       - run: flutter pub get
