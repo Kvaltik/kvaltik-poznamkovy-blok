@@ -452,6 +452,7 @@ class _NotesPageState extends State<NotesPage>
   String search = '';
   String syncStatus = '';
   bool syncing = false;
+  bool showTrash = false;
   bool get cloud => widget.user == null;
   String get legacyKey => 'notes:${widget.user}';
 
@@ -638,6 +639,20 @@ class _NotesPageState extends State<NotesPage>
     if (cloud) syncNow();
   }
 
+  Future<void> restore(int index) async {
+    final note = notes[index];
+    if (cloud) {
+      final restored = CloudSync.makeNote(id: note['id'] as String, title: (note['title'] ?? '').toString(), body: (note['body'] ?? '').toString());
+      await CloudSync.change(restored);
+      notes[index] = restored;
+      syncNow();
+    } else {
+      note.remove('deleted_at');
+      await localSave();
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> remove(int index) async {
     final target = notes[index];
     if (cloud) {
@@ -653,8 +668,9 @@ class _NotesPageState extends State<NotesPage>
       if (mounted) setState(() {});
       syncNow();
     } else {
-      setState(() => notes.removeAt(index));
+      notes[index]['deleted_at'] = DateTime.now().toUtc().toIso8601String();
       await localSave();
+      if (mounted) setState(() {});
     }
   }
 
@@ -689,7 +705,7 @@ class _NotesPageState extends State<NotesPage>
   Widget build(BuildContext context) {
     final shown = notes.asMap().entries.where((entry) {
       final item = entry.value;
-      if (cloud && item['deleted_at'] != null) return false;
+      if ((item['deleted_at'] != null) != showTrash) return false;
       return ('${item['title']} ${item['body']}')
           .toLowerCase()
           .contains(search);
@@ -697,8 +713,9 @@ class _NotesPageState extends State<NotesPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kvaltík Notepad'),
+        title: Text(showTrash ? 'Koš' : 'Kvaltík Notepad'),
         actions: [
+          IconButton(tooltip: showTrash ? 'Poznámky' : 'Koš', icon: Icon(showTrash ? Icons.arrow_back : Icons.delete_outline), onPressed: () => setState(() => showTrash = !showTrash)),
           if (cloud)
             IconButton(
               tooltip: 'Synchronizovat',
@@ -778,18 +795,18 @@ class _NotesPageState extends State<NotesPage>
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      onTap: () => edit(entry.key),
+                      onTap: showTrash ? null : () => edit(entry.key),
                       trailing: IconButton(
-                        tooltip: 'Smazat',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => remove(entry.key),
+                        tooltip: showTrash ? 'Obnovit' : 'Přesunout do koše',
+                        icon: Icon(showTrash ? Icons.restore : Icons.delete_outline),
+                        onPressed: () => showTrash ? restore(entry.key) : remove(entry.key),
                       ),
                     );
                   },
                 ),
         ),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: showTrash ? null : FloatingActionButton.extended(
         onPressed: () => edit(),
         icon: const Icon(Icons.add),
         label: const Text('Poznámka'),
