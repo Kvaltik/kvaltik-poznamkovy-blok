@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,6 +44,10 @@ class UpdateChecker {
         return;
       }
       final assets = (release['assets'] as List? ?? []).whereType<Map>().toList();
+      if (!Platform.isAndroid && !Platform.isWindows) {
+        if (manual && context.mounted) await _message(context, 'Nepodporovaná platforma', 'Automatické aktualizace jsou dostupné pro Windows a Android.');
+        return;
+      }
       final expectedName = Platform.isAndroid ? 'KvaltikNotepad-Android.apk' : 'KvaltikNotepad-Setup.exe';
       final matching = assets.where((a) => (a['name'] ?? '').toString() == expectedName).toList();
       final candidate = matching.isEmpty ? null : Uri.tryParse((matching.first['browser_download_url'] ?? '').toString());
@@ -58,20 +63,55 @@ class UpdateChecker {
           if (download == null) const Padding(padding: EdgeInsets.only(top: 12), child: Text('Instalační soubor pro toto zařízení zatím není ve vydání dostupný.')),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Později')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Připomenout při dalším spuštění')),
           FilledButton(onPressed: download == null ? null : () async {
             Navigator.pop(dialogContext);
-            // Open the trusted GitHub asset URL in the system browser.
-            // Installation requires explicit user confirmation.
-            final opened = await launchUrl(download, mode: LaunchMode.externalApplication);
-            if (!opened && context.mounted) {
-              await _message(context, 'Nelze otevřít aktualizaci', 'Zkus stáhnout instalátor z GitHub Releases ručně.');
-            }
+            await _installUpdate(context, download);
+
           }, child: const Text('Aktualizovat')),
         ],
       ));
     } catch (_) {
       if (manual && context.mounted) await _message(context, 'Kontrola se nezdařila', 'Zkontroluj připojení k internetu a zkus to znovu.');
+    }
+  }
+
+  /// Download installer to temporary storage and launch the OS installation UI.
+  /// Android still requires the user to approve installation.
+  static Future<void> _installUpdate(BuildContext context, Uri download) async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final directory = await Directory.systemTemp.createTemp('kvaltik-update-');
+      final path = '${directory.path}${Platform.pathSeparator}KvaltikNotepad-${info.version}-update.${Platform.isAndroid ? 'apk' : 'exe'}';
+      final file = File(path);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+      try {
+        final request = await client.getUrl(download);
+        request.headers.set(HttpHeaders.userAgentHeader, 'KvaltikNotepad-Updater');
+        final response = await request.close().timeout(const Duration(seconds: 30));
+        if (response.statusCode != HttpStatus.ok) {
+          throw HttpException('Download HTTP ${response.statusCode}');
+        }
+        final sink = file.openWrite();
+        await sink.addStream(response);
+        await sink.flush();
+        await sink.close();
+        if (await file.length() == 0) throw const FormatException('Empty installer');
+      } finally {
+        client.close(force: true);
+      }
+      if (Platform.isWindows) {
+        await Process.start(file.path, const [], mode: ProcessStartMode.detached);
+      } else {
+        // Android cannot execute APK files. Use the system browser to start
+        // the platform's download / package installation flow instead.
+        final opened = await launchUrl(download, mode: LaunchMode.externalApplication);
+        if (!opened) throw const FormatException('Cannot open Android installer');
+      }
+    } catch (_) {
+      if (context.mounted) {
+        await _message(context, 'Aktualizace se nezdařila', 'Instalátor se nepodařilo spustit. Zkus aktualizaci stáhnout z GitHub Releases.');
+      }
     }
   }
 
