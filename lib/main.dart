@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud_sync.dart';
+import 'note_folder.dart';
 import 'update_checker.dart';
 
 Future<void> main() async {
@@ -453,6 +454,58 @@ class _NotesPageState extends State<NotesPage>
   String syncStatus = '';
   bool syncing = false;
   bool showTrash = false;
+  List<NoteFolder> folders = [];
+  String? selectedFolderId;
+  String get folderKey => 'folders:${cloud ? CloudSync.user?.id : widget.user}';
+  String get assignmentKey => 'folder-assignments:${cloud ? CloudSync.user?.id : widget.user}';
+  Map<String, String> assignments = {};
+
+  Future<void> loadFolders() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final list = jsonDecode(prefs.getString(folderKey) ?? '[]') as List;
+      final map = jsonDecode(prefs.getString(assignmentKey) ?? '{}') as Map;
+      if (mounted) setState(() {
+        folders = list.map((v) => NoteFolder.fromJson(Map<String, dynamic>.from(v as Map))).toList();
+        assignments = map.map((k, v) => MapEntry(k.toString(), v.toString()));
+      });
+    } catch (_) { /* Ignore damaged folder preferences, preserve notes. */ }
+  }
+
+  Future<void> saveFolders() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(folderKey, jsonEncode(folders.map((f) => f.toJson()).toList()));
+    await prefs.setString(assignmentKey, jsonEncode(assignments));
+  }
+
+  Future<void> addFolder() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Nová složka'),
+      content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(hintText: 'Název složky')),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Zrušit')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Vytvořit'))],
+    ));
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    setState(() => folders.add(NoteFolder(id: CloudSync.newId(), name: name)));
+    await saveFolders();
+  }
+
+  Future<void> moveToFolder(Map<String, dynamic> note) async {
+    if (cloud && note['id'] == null) return;
+    final id = cloud ? note['id'].toString() : notes.indexOf(note).toString();
+    final chosen = await showModalBottomSheet<String>(context: context, builder: (ctx) => SafeArea(child: ListView(
+      shrinkWrap: true, children: [
+        ListTile(title: const Text('Bez složky'), onTap: () => Navigator.pop(ctx, '')),
+        ...folders.map((folder) => ListTile(title: Text(folder.name), onTap: () => Navigator.pop(ctx, folder.id))),
+      ],
+    )));
+    if (chosen == null) return;
+    setState(() { if (chosen.isEmpty) { assignments.remove(id); } else { assignments[id] = chosen; } });
+    await saveFolders();
+  }
+
   bool get cloud => widget.user == null;
   String get legacyKey => 'notes:${widget.user}';
 
@@ -461,6 +514,7 @@ class _NotesPageState extends State<NotesPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     load();
+    loadFolders();
     if (cloud) {
       refreshTimer = Timer.periodic(
           const Duration(seconds: 20), (_) => syncNow());
@@ -706,6 +760,10 @@ class _NotesPageState extends State<NotesPage>
     final shown = notes.asMap().entries.where((entry) {
       final item = entry.value;
       if ((item['deleted_at'] != null) != showTrash) return false;
+      if (!showTrash && selectedFolderId != null) {
+        final key = cloud ? item['id'].toString() : entry.key.toString();
+        if (assignments[key] != selectedFolderId) return false;
+      }
       return ('${item['title']} ${item['body']}')
           .toLowerCase()
           .contains(search);
@@ -715,6 +773,7 @@ class _NotesPageState extends State<NotesPage>
       appBar: AppBar(
         title: Text(showTrash ? 'Koš' : 'Kvaltík Notepad'),
         actions: [
+          if (!showTrash) IconButton(tooltip: 'Nová složka', icon: const Icon(Icons.create_new_folder_outlined), onPressed: addFolder),
           IconButton(tooltip: showTrash ? 'Poznámky' : 'Koš', icon: Icon(showTrash ? Icons.arrow_back : Icons.delete_outline), onPressed: () => setState(() => showTrash = !showTrash)),
           if (cloud)
             IconButton(
@@ -780,6 +839,10 @@ class _NotesPageState extends State<NotesPage>
             ),
           ),
         ),
+        if (!showTrash) SizedBox(height: 54, child: ListView(scrollDirection: Axis.horizontal, children: [
+          TextButton(onPressed: () => setState(() => selectedFolderId = null), child: const Text('Všechny')),
+          ...folders.map((folder) => TextButton(onPressed: () => setState(() => selectedFolderId = folder.id), child: Text(folder.name))),
+        ])),
         Expanded(
           child: shown.isEmpty
               ? const Center(child: Text('Žádné poznámky. Přidej první!'))
@@ -796,6 +859,7 @@ class _NotesPageState extends State<NotesPage>
                         overflow: TextOverflow.ellipsis,
                       ),
                       onTap: showTrash ? null : () => edit(entry.key),
+                      onLongPress: showTrash ? null : () => moveToFolder(note),
                       trailing: IconButton(
                         tooltip: showTrash ? 'Obnovit' : 'Přesunout do koše',
                         icon: Icon(showTrash ? Icons.restore : Icons.delete_outline),
