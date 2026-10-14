@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -80,10 +79,16 @@ class UpdateChecker {
   /// Android still requires the user to approve installation.
   static Future<void> _installUpdate(BuildContext context, Uri download) async {
     try {
-      final info = await PackageInfo.fromPlatform();
       final directory = await Directory.systemTemp.createTemp('kvaltik-update-');
-      final path = '${directory.path}${Platform.pathSeparator}KvaltikNotepad-${info.version}-update.${Platform.isAndroid ? 'apk' : 'exe'}';
+      final path = '${directory.path}${Platform.pathSeparator}KvaltikNotepad-update.${Platform.isAndroid ? 'apk' : 'exe'}';
       final file = File(path);
+      if (Platform.isAndroid) {
+        // Android needs a content:// URI through a FileProvider to install a
+        // downloaded APK; the trusted release URL is handed to the browser.
+        final opened = await launchUrl(download, mode: LaunchMode.externalApplication);
+        if (!opened) throw const FormatException('Cannot open Android installer');
+        return;
+      }
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       try {
         final request = await client.getUrl(download);
@@ -102,11 +107,6 @@ class UpdateChecker {
       }
       if (Platform.isWindows) {
         await Process.start(file.path, const [], mode: ProcessStartMode.detached);
-      } else {
-        // Android cannot execute APK files. Use the system browser to start
-        // the platform's download / package installation flow instead.
-        final opened = await launchUrl(download, mode: LaunchMode.externalApplication);
-        if (!opened) throw const FormatException('Cannot open Android installer');
       }
     } catch (_) {
       if (context.mounted) {
