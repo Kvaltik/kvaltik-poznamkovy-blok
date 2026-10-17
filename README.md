@@ -11,6 +11,33 @@ Poznámkový blok pro **Windows (EXE)** a **Android (APK)** vytvořený ve Flutt
 
 **Novinka 1.2.0:** Offline-first synchronizace poznámek přes Supabase na PC a mobilu včetně bezpečného převodu starých místních poznámek. Vyžaduje jednorázové [nastavení Supabase](docs/cloud_setup.md) a spuštění [SQL databázového skriptu](supabase/schema.sql). Před přeinstalací Androidu původní data nejdřív převeď nebo zazálohuj.
 
+## Kvaltík Notepad 1.3.0 — první etapa rozšíření
+
+Ze seznamu 25 funkcí byly v této etapě implementovány následující části:
+
+- **Realtime upozornění na změny poznámek:** stream přes Supabase Postgres Changes (záložní kontrola každých 20 sekund); funkce běží pouze při otevřené aplikaci.
+- **Offline režim:** trvalá lokální fronta změn; její chování při konfliktních úpravách na více zařízeních je nadále omezené.
+- **Historie verzí:** databázový trigger ukládá předchozí verzi názvu, obsahu a metadat po každé změně; z nabídky poznámky lze obnovit starší verzi.
+- **Cesty podsložek:** zápis cest jako `Práce/2026` v editoru; cesty se synchronizují a zobrazují ve filtrech. **Nejde ještě o plnohodnotný správce složek** a prázdné složky nejsou synchronizované.
+- **Barevné štítky — částečně:** přidáno zadávání textových štítků oddělených čárkami, synchronizované do cloudu a vyhledatelné. Výběr barev zatím chybí.
+- **Připnuté a archiv:** volby v nabídce poznámky, filtr připnutých a archiv.
+- **Pokročilejší hledání:** hledá také ve štítcích a cestách podsložek.
+- **Statistiky:** počet poznámek, archivovaných, připnutých, štítků a položek v koši.
+- **Záloha JSON — částečně:** kopírování JSON zálohy poznámek a místních složek do schránky. Ukládání přímo do PDF/TXT/ZIP zatím chybí.
+
+**Ještě nejsou implementované:** PIN/zamykání, chytrý kalendář, připomínky,
+opakované úkoly, interaktivní checklisty, přílohy, hlasové poznámky,
+AI asistent, nástěnka, propojená zařízení, spolupráce, souborové exporty
+TXT/PDF/ZIP, přizpůsobení vzhledu nad rámec světlého/tmavého motivu,
+klávesové zkratky, Android widgety a stahování aktualizací na pozadí.
+
+Databázová migrace je v [supabase/upgrade_1_3.sql](supabase/upgrade_1_3.sql).
+Je **aditivní** a nemaže dřívější poznámky.
+
+**Před instalací nové Android APK** ověř podpisové klíče a zálohu poznámek.
+Úspěšné GitHub Actions sestavení samo o sobě neprokazuje reálnou funkčnost
+synchronizace na dvou zařízeních.
+
 ## Synchronizace Windows ↔ Android
 
 Propojení účtu a synchronizace funguje od verze **1.2.0**, pokud je dokončeno nastavení Supabase. Při práci bez připojení ukládá aplikace změny lokálně a posílá je po připojení. Změny se stahují v otevřené aplikaci přibližně každých 20 sekund a také po návratu do aplikace.
