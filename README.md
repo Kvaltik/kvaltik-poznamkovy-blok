@@ -22,11 +22,12 @@ Ze seznamu 25 funkcí byly v této etapě implementovány následující části
 - **Barevné štítky — částečně:** přidáno zadávání textových štítků oddělených čárkami, synchronizované do cloudu a vyhledatelné. Výběr barev zatím chybí.
 - **Připnuté a archiv:** volby v nabídce poznámky, filtr připnutých a archiv.
 - **Pokročilejší hledání:** hledá také ve štítcích a cestách podsložek.
+- **Checklisty:** vytváření a odškrtávání položek ve formátu Markdown \`- [ ]\` v editoru poznámky.
 - **Statistiky:** počet poznámek, archivovaných, připnutých, štítků a položek v koši.
 - **Záloha JSON — částečně:** kopírování JSON zálohy poznámek a místních složek do schránky. Ukládání přímo do PDF/TXT/ZIP zatím chybí.
 
 **Ještě nejsou implementované:** PIN/zamykání, chytrý kalendář, připomínky,
-opakované úkoly, interaktivní checklisty, přílohy, hlasové poznámky,
+opakované úkoly, přílohy, hlasové poznámky,
 AI asistent, nástěnka, propojená zařízení, spolupráce, souborové exporty
 TXT/PDF/ZIP, přizpůsobení vzhledu nad rámec světlého/tmavého motivu,
 klávesové zkratky, Android widgety a stahování aktualizací na pozadí.
