@@ -669,6 +669,14 @@ class _NotesPageState extends State<NotesPage>
             title: Text(index == null ? 'Nová poznámka' : 'Upravit poznámku'),
             actions: [
               IconButton(
+                tooltip: 'Přidat úkol do checklistu',
+                icon: const Icon(Icons.add_task),
+                onPressed: () {
+                  final prefix = body.text.isEmpty || body.text.endsWith('\\n') ? '' : '\\n';
+                  body.text = '${body.text}${prefix}- [ ] ';
+                },
+              ),
+              IconButton(
                 tooltip: 'Uložit',
                 icon: const Icon(Icons.check),
                 onPressed: () async {
@@ -696,6 +704,42 @@ class _NotesPageState extends State<NotesPage>
                 prefixIcon: Icon(Icons.label_outline), labelText: 'Štítky oddělené čárkou', isDense: true)),
               TextField(controller: folderController, decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.folder_outlined), labelText: 'Cesta podsložky (např. Práce/2026)', isDense: true)),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: body,
+                builder: (context, value, _) {
+                  final lines = value.text.split('\\n');
+                  final matches = <int>[];
+                  for (var i = 0; i < lines.length; i++) {
+                    if (RegExp(r'^\\s*-\\s*\\[[ xX]\\]').hasMatch(lines[i])) {
+                      matches.add(i);
+                    }
+                  }
+                  if (matches.isEmpty) return const SizedBox.shrink();
+                  return SizedBox(
+                    height: matches.length > 3 ? 130 : matches.length * 42.0,
+                    child: ListView.builder(
+                      itemCount: matches.length,
+                      itemBuilder: (_, i) {
+                        final lineNo = matches[i];
+                        final line = lines[lineNo];
+                        final checked = RegExp(r'^\\s*-\\s*\\[[xX]\\]').hasMatch(line);
+                        return CheckboxListTile(
+                          dense: true,
+                          title: Text(line.replaceFirst(RegExp(r'^\\s*-\\s*\\[[ xX]\\]\\s*'), '')),
+                          value: checked,
+                          onChanged: (next) {
+                            final before = body.text.split('\\n');
+                            if (lineNo >= before.length) return;
+                            before[lineNo] = before[lineNo].replaceFirst(
+                              RegExp(r'\\[[ xX]\\]'), next == true ? '[x]' : '[ ]');
+                            body.text = before.join('\\n');
+                          },
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
               Expanded(
                 child: TextField(
                   controller: body,
