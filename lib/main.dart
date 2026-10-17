@@ -906,8 +906,11 @@ class _NotesPageState extends State<NotesPage>
       if (!showTrash && (item['archived'] == true) != showArchive) return false;
       if (!showTrash && onlyPinned && item['pinned'] != true) return false;
       if (!showTrash && selectedFolderId != null) {
-        final key = cloud ? item['id'].toString() : entry.key.toString();
-        if (assignments[key] != selectedFolderId) return false;
+        if (cloud) {
+          if ((item['folder_path'] ?? '').toString() != selectedFolderId) return false;
+        } else {
+          if (assignments[entry.key.toString()] != selectedFolderId) return false;
+        }
       }
       return ('${item['title']} ${item['body']} ${(item['tags'] as List?)?.join(' ') ?? ''} ${item['folder_path'] ?? ''}')
           .toLowerCase()
@@ -928,7 +931,7 @@ class _NotesPageState extends State<NotesPage>
           if (!showTrash) IconButton(tooltip: 'Archiv', icon: Icon(showArchive ? Icons.inventory_2 : Icons.inventory_2_outlined), onPressed: () => setState(() => showArchive = !showArchive)),
           IconButton(tooltip: 'Statistiky', icon: const Icon(Icons.bar_chart_outlined), onPressed: showStatistics),
           IconButton(tooltip: 'Kopírovat JSON zálohu', icon: const Icon(Icons.save_alt), onPressed: copyBackup),
-          if (!showTrash) IconButton(tooltip: 'Nová složka', icon: const Icon(Icons.create_new_folder_outlined), onPressed: addFolder),
+          if (!showTrash && !cloud) IconButton(tooltip: 'Nová místní složka', icon: const Icon(Icons.create_new_folder_outlined), onPressed: addFolder),
           IconButton(tooltip: showTrash ? 'Poznámky' : 'Koš', icon: Icon(showTrash ? Icons.arrow_back : Icons.delete_outline), onPressed: () => setState(() => showTrash = !showTrash)),
           if (cloud)
             IconButton(
@@ -996,7 +999,15 @@ class _NotesPageState extends State<NotesPage>
         ),
         if (!showTrash) SizedBox(height: 54, child: ListView(scrollDirection: Axis.horizontal, children: [
           TextButton(onPressed: () => setState(() => selectedFolderId = null), child: const Text('Všechny')),
-          ...folders.map((folder) => TextButton(onPressed: () => setState(() => selectedFolderId = folder.id), child: Text(folder.name))),
+          if (cloud)
+            ...notes.map((n) => (n['folder_path'] ?? '').toString())
+              .where((p) => p.isNotEmpty).toSet().map((path) =>
+                TextButton(onPressed: () => setState(() => selectedFolderId = path),
+                  child: Text(path)))
+          else
+            ...folders.map((folder) => TextButton(
+              onPressed: () => setState(() => selectedFolderId = folder.id),
+              child: Text(folder.name))),
         ])),
         Expanded(
           child: shown.isEmpty
@@ -1031,7 +1042,8 @@ class _NotesPageState extends State<NotesPage>
                               PopupMenuItem(value: 'pin', child: Text(note['pinned'] == true ? 'Odepnout' : 'Připnout')),
                               PopupMenuItem(value: 'archive', child: Text(note['archived'] == true ? 'Z archivu' : 'Archivovat')),
                               if (cloud) const PopupMenuItem(value: 'history', child: Text('Historie verzí')),
-                              const PopupMenuItem(value: 'folder', child: Text('Místní složka')),
+                              if (!cloud) const PopupMenuItem(value: 'folder', child: Text('Místní složka')),
+                              if (cloud) const PopupMenuItem(value: 'folder_help', child: Text('Podsložku zadej v editoru')),
                               const PopupMenuItem(value: 'delete', child: Text('Do koše')),
                             ],
                           ),
