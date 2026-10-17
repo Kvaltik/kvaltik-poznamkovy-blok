@@ -672,7 +672,7 @@ class _NotesPageState extends State<NotesPage>
                 tooltip: 'Přidat úkol do checklistu',
                 icon: const Icon(Icons.add_task),
                 onPressed: () {
-                  final prefix = body.text.isEmpty || body.text.endsWith('\\n') ? '' : '\\n';
+                  final prefix = body.text.isEmpty || body.text.endsWith('\n') ? '' : '\n';
                   body.text = '${body.text}${prefix}- [ ] ';
                 },
               ),
@@ -707,10 +707,10 @@ class _NotesPageState extends State<NotesPage>
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: body,
                 builder: (context, value, _) {
-                  final lines = value.text.split('\\n');
+                  final lines = value.text.split('\n');
                   final matches = <int>[];
                   for (var i = 0; i < lines.length; i++) {
-                    if (RegExp(r'^\\s*-\\s*\\[[ xX]\\]').hasMatch(lines[i])) {
+                    if (RegExp(r'^\s*-\s*\[[ xX]\]').hasMatch(lines[i])) {
                       matches.add(i);
                     }
                   }
@@ -722,17 +722,17 @@ class _NotesPageState extends State<NotesPage>
                       itemBuilder: (_, i) {
                         final lineNo = matches[i];
                         final line = lines[lineNo];
-                        final checked = RegExp(r'^\\s*-\\s*\\[[xX]\\]').hasMatch(line);
+                        final checked = RegExp(r'^\s*-\s*\[[xX]\]').hasMatch(line);
                         return CheckboxListTile(
                           dense: true,
-                          title: Text(line.replaceFirst(RegExp(r'^\\s*-\\s*\\[[ xX]\\]\\s*'), '')),
+                          title: Text(line.replaceFirst(RegExp(r'^\s*-\s*\[[ xX]\]\s*'), '')),
                           value: checked,
                           onChanged: (next) {
-                            final before = body.text.split('\\n');
+                            final before = body.text.split('\n');
                             if (lineNo >= before.length) return;
                             before[lineNo] = before[lineNo].replaceFirst(
-                              RegExp(r'\\[[ xX]\\]'), next == true ? '[x]' : '[ ]');
-                            body.text = before.join('\\n');
+                              RegExp(r'\[[ xX]\]'), next == true ? '[x]' : '[ ]');
+                            body.text = before.join('\n');
                           },
                         );
                       },
