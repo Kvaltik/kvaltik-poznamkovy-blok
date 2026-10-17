@@ -55,6 +55,8 @@ class CloudSync {
 
   static Map<String, dynamic> makeNote({
     String? id, required String title, required String body, bool deleted = false,
+    bool pinned = false, bool archived = false,
+    List<String> tags = const [], String folderPath = '',
   }) {
     final stamp = DateTime.now().toUtc().toIso8601String();
     return <String, dynamic>{
@@ -63,6 +65,10 @@ class CloudSync {
       'body': body,
       'updated_at': stamp,
       'deleted_at': deleted ? stamp : null,
+      'pinned': pinned,
+      'archived': archived,
+      'tags': tags,
+      'folder_path': folderPath,
     };
   }
 
@@ -120,6 +126,10 @@ class CloudSync {
         'body': local['body'],
         'updated_at': local['updated_at'],
         'deleted_at': local['deleted_at'],
+        'pinned': local['pinned'] == true,
+        'archived': local['archived'] == true,
+        'tags': (local['tags'] as List?)?.map((e) => e.toString()).toList() ?? <String>[],
+        'folder_path': (local['folder_path'] ?? '').toString(),
       };
 
   /// Foreground sync: push queued changes, then pull all server rows.
@@ -146,7 +156,7 @@ class CloudSync {
         if (_uid != uid) return;
         final page = await client
             .from('notes')
-            .select('id,title,body,updated_at,deleted_at')
+            .select('id,title,body,updated_at,deleted_at,pinned,archived,tags,folder_path')
             .eq('owner_id', uid)
             .range(offset, offset + 999);
         remote.addAll(page.map((e) => Map<String, dynamic>.from(e)));
