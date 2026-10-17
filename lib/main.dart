@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud_sync.dart';
@@ -454,6 +455,8 @@ class _NotesPageState extends State<NotesPage>
   String syncStatus = '';
   bool syncing = false;
   bool showTrash = false;
+  bool showArchive = false;
+  bool onlyPinned = false;
   List<NoteFolder> folders = [];
   String? selectedFolderId;
   String get folderKey => 'folders:${cloud ? CloudSync.user?.id : widget.user}';
@@ -590,6 +593,8 @@ class _NotesPageState extends State<NotesPage>
         text: original == null ? '' : (original['title'] ?? '').toString());
     final body = TextEditingController(
         text: original == null ? '' : (original['body'] ?? '').toString());
+    final tagsController = TextEditingController(text: ((original?['tags'] as List?) ?? []).join(', '));
+    final folderController = TextEditingController(text: (original?['folder_path'] ?? '').toString());
     var editingIndex = index;
     String? noteId = cloud ? (original?['id'] as String?) : null;
     Timer? autoSaveTimer;
@@ -602,7 +607,11 @@ class _NotesPageState extends State<NotesPage>
         final note = CloudSync.makeNote(
             id: noteId,
             title: title.text.trim().isEmpty ? 'Bez názvu' : title.text.trim(),
-            body: body.text);
+            body: body.text,
+            pinned: original?['pinned'] == true,
+            archived: original?['archived'] == true,
+            tags: tagsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList(),
+            folderPath: folderController.text.trim());
         noteId = note['id'] as String;
         await CloudSync.change(note);
         notes.removeWhere((entry) => entry['id'] == noteId);
@@ -613,6 +622,10 @@ class _NotesPageState extends State<NotesPage>
               title.text.trim().isEmpty ? 'Bez názvu' : title.text.trim(),
           'body': body.text,
           'updated': DateTime.now().toIso8601String(),
+          'pinned': original?['pinned'] == true,
+          'archived': original?['archived'] == true,
+          'tags': tagsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList(),
+          'folder_path': folderController.text.trim(),
         };
         if (editingIndex == null) {
           notes.insert(0, item);
@@ -635,6 +648,8 @@ class _NotesPageState extends State<NotesPage>
 
     title.addListener(scheduleSave);
     body.addListener(scheduleSave);
+    tagsController.addListener(scheduleSave);
+    folderController.addListener(scheduleSave);
 
     await Navigator.push<void>(
       context,
@@ -667,6 +682,10 @@ class _NotesPageState extends State<NotesPage>
                     hintText: 'Název poznámky', border: InputBorder.none),
               ),
               const Divider(),
+              TextField(controller: tagsController, decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.label_outline), labelText: 'Štítky oddělené čárkou', isDense: true)),
+              TextField(controller: folderController, decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.folder_outlined), labelText: 'Cesta podsložky (např. Práce/2026)', isDense: true)),
               Expanded(
                 child: TextField(
                   controller: body,
@@ -687,8 +706,12 @@ class _NotesPageState extends State<NotesPage>
     await persist(); // Flush last keystrokes, also when Android Back was pressed.
     title.removeListener(scheduleSave);
     body.removeListener(scheduleSave);
+    tagsController.removeListener(scheduleSave);
+    folderController.removeListener(scheduleSave);
     title.dispose();
     body.dispose();
+    tagsController.dispose();
+    folderController.dispose();
     if (mounted) setState(() {});
     if (cloud) syncNow();
   }
@@ -696,7 +719,10 @@ class _NotesPageState extends State<NotesPage>
   Future<void> restore(int index) async {
     final note = notes[index];
     if (cloud) {
-      final restored = CloudSync.makeNote(id: note['id'] as String, title: (note['title'] ?? '').toString(), body: (note['body'] ?? '').toString());
+      final restored = CloudSync.makeNote(id: note['id'] as String, title: (note['title'] ?? '').toString(), body: (note['body'] ?? '').toString(),
+        pinned: note['pinned'] == true, archived: note['archived'] == true,
+        tags: (note['tags'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        folderPath: (note['folder_path'] ?? '').toString());
       await CloudSync.change(restored);
       notes[index] = restored;
       syncNow();
@@ -714,6 +740,10 @@ class _NotesPageState extends State<NotesPage>
         id: target['id'] as String,
         title: (target['title'] ?? '').toString(),
         body: (target['body'] ?? '').toString(),
+        pinned: target['pinned'] == true,
+        archived: target['archived'] == true,
+        tags: (target['tags'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        folderPath: (target['folder_path'] ?? '').toString(),
         deleted: true,
       );
       await CloudSync.change(tombstone);
@@ -726,6 +756,109 @@ class _NotesPageState extends State<NotesPage>
       await localSave();
       if (mounted) setState(() {});
     }
+  }
+
+  Future<void> updateFlags(int index, String action) async {
+    final note = Map<String, dynamic>.from(notes[index]);
+    if (action == 'pin') note['pinned'] = note['pinned'] != true;
+    if (action == 'archive') note['archived'] = note['archived'] != true;
+    if (cloud) {
+      final changed = CloudSync.makeNote(
+        id: note['id'] as String,
+        title: (note['title'] ?? '').toString(),
+        body: (note['body'] ?? '').toString(),
+        pinned: note['pinned'] == true,
+        archived: note['archived'] == true,
+        tags: (note['tags'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        folderPath: (note['folder_path'] ?? '').toString(),
+      );
+      await CloudSync.change(changed);
+      notes[index] = changed;
+      syncNow();
+    } else {
+      notes[index] = note;
+      await localSave();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> showHistory(int index) async {
+    if (!cloud || !mounted) return;
+    final selected = notes[index];
+    final records = await CloudSync.client
+        .from('note_versions')
+        .select('id,title,body,saved_at,pinned,archived,tags,folder_path')
+        .eq('note_id', selected['id'] as String)
+        .order('id', ascending: false)
+        .limit(50);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Historie poznámky'),
+        content: SizedBox(
+          width: 520, height: 350,
+          child: records.isEmpty
+              ? const Center(child: Text('Zatím žádné starší verze.'))
+              : ListView.builder(
+                  itemCount: records.length,
+                  itemBuilder: (_, i) {
+                    final old = records[i];
+                    return ListTile(
+                      title: Text((old['title'] ?? '').toString()),
+                      subtitle: Text('${old['saved_at']} – ${old['body']}', maxLines: 2),
+                      trailing: TextButton(
+                        onPressed: () async {
+                          final restored = CloudSync.makeNote(
+                            id: selected['id'] as String,
+                            title: (old['title'] ?? '').toString(),
+                            body: (old['body'] ?? '').toString(),
+                            pinned: old['pinned'] == true,
+                            archived: old['archived'] == true,
+                            tags: (old['tags'] as List?)?.map((e) => e.toString()).toList() ?? [],
+                            folderPath: (old['folder_path'] ?? '').toString(),
+                          );
+                          await CloudSync.change(restored);
+                          notes[index] = restored;
+                          if (dialogContext.mounted) Navigator.pop(dialogContext);
+                          if (mounted) setState(() {});
+                          syncNow();
+                        },
+                        child: const Text('Obnovit'),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Zavřít')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> showStatistics() async {
+    final live = notes.where((n) => n['deleted_at'] == null).toList();
+    final labels = live.expand((n) => (n['tags'] as List?) ?? []).toSet();
+    final text = 'Poznámky: ${live.length}\nPřipnuté: ${live.where((n) => n['pinned'] == true).length}\nArchiv: ${live.where((n) => n['archived'] == true).length}\nŠtítky: ${labels.length}\nV koši: ${notes.length - live.length}';
+    if (!mounted) return;
+    await showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Statistiky'), content: Text(text),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Zavřít'))],
+    ));
+  }
+
+  Future<void> copyBackup() async {
+    final data = const JsonEncoder.withIndent('  ').convert({
+      'format': 'kvaltik-notepad-backup',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'notes': notes,
+      'folders': folders.map((e) => e.toJson()).toList(),
+    });
+    await Clipboard.setData(ClipboardData(text: data));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('JSON záloha zkopírována do schránky. Ulož ji jako .json.')));
   }
 
   Future<void> connectCloud() async {
@@ -760,19 +893,31 @@ class _NotesPageState extends State<NotesPage>
     final shown = notes.asMap().entries.where((entry) {
       final item = entry.value;
       if ((item['deleted_at'] != null) != showTrash) return false;
+      if (!showTrash && (item['archived'] == true) != showArchive) return false;
+      if (!showTrash && onlyPinned && item['pinned'] != true) return false;
       if (!showTrash && selectedFolderId != null) {
         final key = cloud ? item['id'].toString() : entry.key.toString();
         if (assignments[key] != selectedFolderId) return false;
       }
-      return ('${item['title']} ${item['body']}')
+      return ('${item['title']} ${item['body']} ${(item['tags'] as List?)?.join(' ') ?? ''} ${item['folder_path'] ?? ''}')
           .toLowerCase()
           .contains(search);
     }).toList();
+    shown.sort((a, b) {
+      final pinned = (b.value['pinned'] == true ? 1 : 0) - (a.value['pinned'] == true ? 1 : 0);
+      if (pinned != 0) return pinned;
+      return (b.value['updated_at'] ?? b.value['updated'] ?? '').toString()
+          .compareTo((a.value['updated_at'] ?? a.value['updated'] ?? '').toString());
+    });
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(showTrash ? 'Koš' : 'Kvaltík Notepad'),
+        title: Text(showTrash ? 'Koš' : showArchive ? 'Archiv' : 'Kvaltík Notepad'),
         actions: [
+          if (!showTrash) IconButton(tooltip: 'Jen připnuté', icon: Icon(onlyPinned ? Icons.push_pin : Icons.push_pin_outlined), onPressed: () => setState(() => onlyPinned = !onlyPinned)),
+          if (!showTrash) IconButton(tooltip: 'Archiv', icon: Icon(showArchive ? Icons.inventory_2 : Icons.inventory_2_outlined), onPressed: () => setState(() => showArchive = !showArchive)),
+          IconButton(tooltip: 'Statistiky', icon: const Icon(Icons.bar_chart_outlined), onPressed: showStatistics),
+          IconButton(tooltip: 'Kopírovat JSON zálohu', icon: const Icon(Icons.save_alt), onPressed: copyBackup),
           if (!showTrash) IconButton(tooltip: 'Nová složka', icon: const Icon(Icons.create_new_folder_outlined), onPressed: addFolder),
           IconButton(tooltip: showTrash ? 'Poznámky' : 'Koš', icon: Icon(showTrash ? Icons.arrow_back : Icons.delete_outline), onPressed: () => setState(() => showTrash = !showTrash)),
           if (cloud)
@@ -860,11 +1005,26 @@ class _NotesPageState extends State<NotesPage>
                       ),
                       onTap: showTrash ? null : () => edit(entry.key),
                       onLongPress: showTrash ? null : () => moveToFolder(note),
-                      trailing: IconButton(
-                        tooltip: showTrash ? 'Obnovit' : 'Přesunout do koše',
-                        icon: Icon(showTrash ? Icons.restore : Icons.delete_outline),
-                        onPressed: () => showTrash ? restore(entry.key) : remove(entry.key),
-                      ),
+                      leading: note['pinned'] == true ? const Icon(Icons.push_pin, size: 17) : null,
+                      trailing: showTrash
+                        ? IconButton(tooltip: 'Obnovit', icon: const Icon(Icons.restore),
+                            onPressed: () => restore(entry.key))
+                        : PopupMenuButton<String>(
+                            tooltip: 'Možnosti poznámky',
+                            onSelected: (action) {
+                              if (action == 'delete') remove(entry.key);
+                              if (action == 'pin' || action == 'archive') updateFlags(entry.key, action);
+                              if (action == 'history') showHistory(entry.key);
+                              if (action == 'folder') moveToFolder(note);
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(value: 'pin', child: Text(note['pinned'] == true ? 'Odepnout' : 'Připnout')),
+                              PopupMenuItem(value: 'archive', child: Text(note['archived'] == true ? 'Z archivu' : 'Archivovat')),
+                              if (cloud) const PopupMenuItem(value: 'history', child: Text('Historie verzí')),
+                              const PopupMenuItem(value: 'folder', child: Text('Místní složka')),
+                              const PopupMenuItem(value: 'delete', child: Text('Do koše')),
+                            ],
+                          ),
                     );
                   },
                 ),
