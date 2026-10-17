@@ -451,6 +451,7 @@ class _NotesPageState extends State<NotesPage>
     with WidgetsBindingObserver {
   List<Map<String, dynamic>> notes = [];
   Timer? refreshTimer;
+  StreamSubscription<List<Map<String, dynamic>>>? realtimeSubscription;
   String search = '';
   String syncStatus = '';
   bool syncing = false;
@@ -519,6 +520,14 @@ class _NotesPageState extends State<NotesPage>
     load();
     loadFolders();
     if (cloud) {
+      // Realtime emits when another device changes a row; periodic sync is a fallback.
+      final uid = CloudSync.user?.id;
+      if (uid != null) {
+        realtimeSubscription = CloudSync.client.from('notes')
+            .stream(primaryKey: ['id'])
+            .eq('owner_id', uid)
+            .listen((_) { if (mounted) syncNow(); }, onError: (_) {});
+      }
       refreshTimer = Timer.periodic(
           const Duration(seconds: 20), (_) => syncNow());
     }
@@ -542,6 +551,7 @@ class _NotesPageState extends State<NotesPage>
   @override
   void dispose() {
     refreshTimer?.cancel();
+    realtimeSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
